@@ -29,7 +29,7 @@
       {% for e in events %}
       <tr>
         <td class="muted">{{ e.received_at[:19] if e.received_at else '-' }}</td>
-        <td><a href="/alarm/{{ e.alarm_id }}">{{ e.alarm_id[:20] }}{% if e.alarm_id and e.alarm_id|length > 20 %}…{% endif %}</a></td>
+        <td><a href="/alarm/{{ e.alarm_id or '' }}">{{ (e.alarm_id or '-')[:20] }}{% if e.alarm_id and e.alarm_id|length > 20 %}…{% endif %}</a></td>
         <td><span class="badge badge-{{ e.state|lower }}">{{ e.state }}</span></td>
         <td>{{ e.payload.get('rule') or '-' }}</td>
         <td>{{ e.payload.get('alarmSeverity') or '-' }}</td>
