@@ -1,3 +1,0 @@
-# One line per user: username:werkzeug_hash
-# Create entries with: python scripts/add_user.py <username> <password>
-# (Do not commit users.txt if it contains real passwords.)
