@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Compare webhook vs API alarms{% endblock %}
+{% block content %}
+  <h1>Compare alarms (webhook receiver vs App API)</h1>
+  <p class="muted">Segment by org_id + connector_id. Set RECEIVER_URL, RECEIVER_API_KEY, APP_API_BASE_URL, APP_API_TOKEN.</p>
+  <form method="post" action="/">
+    <div>
+      <label for="org_id">Org ID</label>
+      <input id="org_id" name="org_id" type="text" value="{{ result.org_id if result else '' }}" placeholder="e.g. 3" size="10" required>
+    </div>
+    <div>
+      <label for="connector_id">Connector ID</label>
+      <input id="connector_id" name="connector_id" type="text" value="{{ result.connector_id if result else '' }}" placeholder="e.g. 68" size="10" required>
+    </div>
+    <div>
+      <label for="date_from">Date from (ISO)</label>
+      <input id="date_from" name="date_from" type="text" value="{{ result.date_from if result else default_date_from }}" placeholder="2026-02-09T17:55:00" size="22">
+    </div>
+    <div>
+      <label for="date_to">Date to (ISO)</label>
+      <input id="date_to" name="date_to" type="text" value="{{ result.date_to if result else default_date_to }}" placeholder="2026-02-09T18:56:00" size="22">
+    </div>
+    <div>
+      <button type="submit">Compare</button>
+    </div>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if result %}
+    <h2>Segment: org_id={{ result.org_id }}, connector_id={{ result.connector_id }}</h2>
+    <p class="muted">Webhook events in range: {{ result.webhook_total }} · API alarms in range: {{ result.api_total }}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-ok">In both</span> (webhook alarmId matches API externalAlarmId)</td>
+          <td>{{ result.count_in_both }}</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-warn">Only in webhook</span></td>
+          <td>{{ result.count_only_webhook }}</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-err">Only in API</span></td>
+          <td>{{ result.count_only_api }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>In both ({{ result.count_in_both }})</h2>
+    {% for row in result.in_both %}
+    <details>
+      <summary>{{ row.id }} — raised {{ row.api_alarm.raisedTime }} · {{ row.api_alarm.status }}</summary>
+      <p class="muted">Webhook events (RAISED/CLEARED):</p>
+      {% for ev in row.webhook_events %}
+      <pre>{{ ev.payload | tojson(indent=2) }}</pre>
+      {% endfor %}
+      <p class="muted">API alarm:</p>
+      <pre>{{ row.api_alarm | tojson(indent=2) }}</pre>
+    </details>
+    {% else %}
+    <p class="muted">None</p>
+    {% endfor %}
+
+    <h2>Only in webhook ({{ result.count_only_webhook }})</h2>
+    {% for row in result.only_webhook %}
+    <details>
+      <summary>{{ row.id }}</summary>
+      {% for ev in row.webhook_events %}
+      <pre>{{ ev.payload | tojson(indent=2) }}</pre>
+      {% endfor %}
+    </details>
+    {% else %}
+    <p class="muted">None</p>
+    {% endfor %}
+
+    <h2>Only in API ({{ result.count_only_api }})</h2>
+    {% for row in result.only_api %}
+    <details>
+      <summary>{{ row.id }} — {{ row.api_alarm.raisedTime }} · {{ row.api_alarm.status }}</summary>
+      <pre>{{ row.api_alarm | tojson(indent=2) }}</pre>
+    </details>
+    {% else %}
+    <p class="muted">None</p>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

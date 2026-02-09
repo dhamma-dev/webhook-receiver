@@ -7,6 +7,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 
+def _payload_val(event: dict, key: str) -> Optional[str]:
+    """Normalize payload value to string for filtering (orgId/connectorId may be int)."""
+    p = event.get("payload") or {}
+    v = p.get(key)
+    return str(v) if v is not None else None
+
+
 class InMemoryStore:
     """In-memory list of alarm events. No persistence across restarts."""
 
@@ -32,6 +39,10 @@ class InMemoryStore:
         self,
         alarm_id: Optional[str] = None,
         state: Optional[str] = None,
+        org_id: Optional[str] = None,
+        connector_id: Optional[str] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -40,6 +51,14 @@ class InMemoryStore:
             out = [e for e in out if e.get("alarm_id") == alarm_id]
         if state is not None:
             out = [e for e in out if e.get("state") == state]
+        if org_id is not None:
+            out = [e for e in out if _payload_val(e, "orgId") == org_id]
+        if connector_id is not None:
+            out = [e for e in out if _payload_val(e, "connectorId") == connector_id]
+        if since is not None:
+            out = [e for e in out if (e.get("received_at") or "") >= since]
+        if until is not None:
+            out = [e for e in out if (e.get("received_at") or "") <= until]
         # newest first
         out = sorted(out, key=lambda e: e.get("received_at") or "", reverse=True)
         return out[offset : offset + limit]

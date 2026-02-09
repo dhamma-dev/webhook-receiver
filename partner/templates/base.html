@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Alarm comparison{% endblock %}</title>
+  <style>
+    :root { --bg: #0f0f12; --card: #1a1a1f; --text: #e4e4e7; --muted: #71717a; --accent: #a78bfa; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem; line-height: 1.5; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem 0; }
+    h2 { font-size: 1rem; margin: 1rem 0 0.5rem 0; }
+    form { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.875rem; color: var(--muted); margin-bottom: 0.25rem; }
+    input { background: var(--card); border: 1px solid #27272a; color: var(--text); padding: 0.4rem 0.6rem; border-radius: 6px; }
+    button { background: var(--accent); color: var(--bg); border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    button:hover { opacity: 0.9; }
+    .muted { color: var(--muted); font-size: 0.875rem; }
+    .error { color: var(--err); margin: 0.5rem 0; }
+    pre { background: var(--card); padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.75rem; }
+    details { margin: 0.5rem 0; }
+    summary { cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #27272a; }
+    th { color: var(--muted); font-weight: 500; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; }
+    .badge-ok { background: rgba(74,222,128,0.2); color: var(--ok); }
+    .badge-warn { background: rgba(251,191,36,0.2); color: var(--warn); }
+    .badge-err { background: rgba(248,113,113,0.2); color: var(--err); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

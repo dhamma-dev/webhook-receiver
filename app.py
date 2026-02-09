@@ -82,21 +82,47 @@ def index():
     )
 
 
+def _api_events_allowed():
+    """Allow access via session or X-API-Key header (for partner service)."""
+    if session.get("user"):
+        return True
+    key = os.environ.get("RECEIVER_API_KEY")
+    if key and request.headers.get("X-API-Key") == key:
+        return True
+    return False
+
+
 @app.route("/api/events")
-@login_required
 def api_events():
-    """JSON list of events for dashboard live refresh. Same query params as index."""
+    """JSON list of events. Auth: session or X-API-Key. Supports org_id, connector_id, since, until for partner."""
+    if not _api_events_allowed():
+        if request.headers.get("X-API-Key") is not None:
+            return jsonify({"error": "Invalid or missing API key"}), 401
+        return redirect(url_for("login", next=request.url))
     alarm_id = request.args.get("alarm_id", "").strip() or None
     state = request.args.get("state", "").strip() or None
+    org_id = request.args.get("org_id", "").strip() or None
+    connector_id = request.args.get("connector_id", "").strip() or None
+    since = request.args.get("since", "").strip() or None
+    until = request.args.get("until", "").strip() or None
     try:
-        limit = min(int(request.args.get("limit", 100)), 500)
+        limit = min(int(request.args.get("limit", 100)), 2000)
     except ValueError:
         limit = 100
     try:
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
         offset = 0
-    events = store.get_events(alarm_id=alarm_id, state=state, limit=limit, offset=offset)
+    events = store.get_events(
+        alarm_id=alarm_id,
+        state=state,
+        org_id=org_id,
+        connector_id=connector_id,
+        since=since,
+        until=until,
+        limit=limit,
+        offset=offset,
+    )
     return jsonify({
         "events": events,
         "total": store.count(),
