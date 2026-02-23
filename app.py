@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, Response
 
 from auth import verify_user, login_required
 from storage import store, payload_inspect_store
@@ -182,6 +182,8 @@ def alarm_pair(alarm_id):
 @login_required
 def inspect_index():
     """List recent arbitrary payloads received at POST /webhook/inspect."""
+    org_id = (request.args.get("org_id") or "").strip() or None
+    type_filter = (request.args.get("type") or "").strip() or None
     try:
         limit = min(int(request.args.get("limit", 50)), 200)
     except ValueError:
@@ -190,14 +192,39 @@ def inspect_index():
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
         offset = 0
-    items = payload_inspect_store.get_all(limit=limit, offset=offset)
+    total_matching = payload_inspect_store.count(org_id=org_id, type_val=type_filter)
+    items = payload_inspect_store.get_all(
+        limit=limit,
+        offset=offset,
+        org_id=org_id,
+        type_val=type_filter,
+    )
     return render_template(
         "inspect.html",
         items=items,
-        total=payload_inspect_store.count(),
+        total=total_matching,
+        total_unfiltered=payload_inspect_store.count(),
         limit=limit,
         offset=offset,
+        org_id_filter=org_id or "",
+        type_filter=type_filter or "",
     )
+
+
+@app.route("/inspect/export")
+@login_required
+def inspect_export():
+    """Export filtered inspect payloads as JSON for analysis."""
+    org_id = (request.args.get("org_id") or "").strip() or None
+    type_filter = (request.args.get("type") or "").strip() or None
+    payloads = payload_inspect_store.get_all_for_export(
+        org_id=org_id,
+        type_val=type_filter,
+    )
+    body = jsonify({"payloads": payloads, "count": len(payloads)}).get_data(as_text=True)
+    resp = Response(body, mimetype="application/json")
+    resp.headers["Content-Disposition"] = "attachment; filename=inspect-export.json"
+    return resp
 
 
 @app.route("/inspect/<item_id>")

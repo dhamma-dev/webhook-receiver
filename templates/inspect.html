@@ -1,8 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Inspect – Payloads{% endblock %}
 {% block content %}
-  <h1>Inspect payloads ({{ total }} total)</h1>
-  <p class="muted">POST any data to <code>/webhook/inspect</code> to capture it here.</p>
+  <h1>Inspect payloads ({{ total }}{% if org_id_filter or type_filter %} matching{% endif %} total)</h1>
+  <p class="muted">POST any data to <code>/webhook/inspect</code> to capture it here. Filter by <code>orgId</code> or <code>type</code> in the JSON body.</p>
+  <form method="get" action="/inspect">
+    <input name="org_id" value="{{ org_id_filter }}" placeholder="orgId" size="20">
+    <input name="type" value="{{ type_filter }}" placeholder="type" size="20">
+    <input type="hidden" name="limit" value="{{ limit }}">
+    <button type="submit">Filter</button>
+    {% if org_id_filter or type_filter %}
+    <a href="/inspect?limit={{ limit }}">Clear filters</a>
+    {% endif %}
+  </form>
+  {% if org_id_filter or type_filter %}
+  <p class="muted">
+    <a href="/inspect/export?{% if org_id_filter %}org_id={{ org_id_filter | urlencode }}&{% endif %}{% if type_filter %}type={{ type_filter | urlencode }}{% endif %}">Export {{ total }} payloads as JSON</a>
+  </p>
+  {% else %}
+  <p class="muted">
+    <a href="/inspect/export">Export all payloads as JSON</a>
+  </p>
+  {% endif %}
   <table>
     <thead>
       <tr>
@@ -21,14 +39,14 @@
         <td><a href="/inspect/{{ i.id }}">View</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="muted">No payloads yet. POST to /webhook/inspect to add some.</td></tr>
+      <tr><td colspan="4" class="muted">No payloads{% if org_id_filter or type_filter %} match the filters{% else %} yet. POST to /webhook/inspect to add some.{% endif %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
   {% if items and (offset > 0 or (items|length) == limit) %}
   <p class="muted">
-    {% if offset > 0 %}<a href="?limit={{ limit }}&offset={{ [0, offset - limit]|max }}">← Newer</a>{% endif %}
-    {% if (items|length) == limit %} <a href="?limit={{ limit }}&offset={{ offset + limit }}">Older →</a>{% endif %}
+    {% if offset > 0 %}<a href="?{% if org_id_filter %}org_id={{ org_id_filter | urlencode }}&{% endif %}{% if type_filter %}type={{ type_filter | urlencode }}&{% endif %}limit={{ limit }}&offset={{ [0, offset - limit]|max }}">← Newer</a>{% endif %}
+    {% if (items|length) == limit %} <a href="?{% if org_id_filter %}org_id={{ org_id_filter | urlencode }}&{% endif %}{% if type_filter %}type={{ type_filter | urlencode }}&{% endif %}limit={{ limit }}&offset={{ offset + limit }}">Older →</a>{% endif %}
   </p>
   {% endif %}
 {% endblock %}

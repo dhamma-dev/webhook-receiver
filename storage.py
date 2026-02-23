@@ -112,8 +112,30 @@ class PayloadInspectStore:
             self._items = self._items[-self._max_items :]
         return record
 
-    def get_all(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        out = sorted(self._items, key=lambda e: e.get("received_at") or "", reverse=True)
+    def _matches(self, item: dict[str, Any], org_id: Optional[str] = None, type_val: Optional[str] = None) -> bool:
+        """True if item's parsed_body (when dict) matches org_id and type filters."""
+        if not org_id and not type_val:
+            return True
+        parsed = item.get("parsed_body")
+        if not isinstance(parsed, dict):
+            return not (org_id or type_val)  # no parsed body -> no match if any filter set
+        if org_id and str(parsed.get("orgId") or "") != str(org_id):
+            return False
+        if type_val and str(parsed.get("type") or "") != str(type_val):
+            return False
+        return True
+
+    def get_all(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        org_id: Optional[str] = None,
+        type_val: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        out = self._items
+        if org_id or type_val:
+            out = [e for e in out if self._matches(e, org_id=org_id, type_val=type_val)]
+        out = sorted(out, key=lambda e: e.get("received_at") or "", reverse=True)
         return out[offset : offset + limit]
 
     def get_by_id(self, item_id: str) -> Optional[dict[str, Any]]:
@@ -122,8 +144,27 @@ class PayloadInspectStore:
                 return e
         return None
 
-    def count(self) -> int:
-        return len(self._items)
+    def count(
+        self,
+        org_id: Optional[str] = None,
+        type_val: Optional[str] = None,
+    ) -> int:
+        if not org_id and not type_val:
+            return len(self._items)
+        return sum(1 for e in self._items if self._matches(e, org_id=org_id, type_val=type_val))
+
+    def get_all_for_export(
+        self,
+        org_id: Optional[str] = None,
+        type_val: Optional[str] = None,
+        max_items: int = 10_000,
+    ) -> list[dict[str, Any]]:
+        """Return all matching items (newest first) for export, up to max_items."""
+        out = self._items
+        if org_id or type_val:
+            out = [e for e in out if self._matches(e, org_id=org_id, type_val=type_val)]
+        out = sorted(out, key=lambda e: e.get("received_at") or "", reverse=True)
+        return out[:max_items]
 
 
 payload_inspect_store = PayloadInspectStore()
