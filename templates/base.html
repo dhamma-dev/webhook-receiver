@@ -32,6 +32,7 @@
   <div class="container">
     <nav>
       <a href="/">Dashboard</a>
+      <a href="/inspect">Inspect</a>
       {% if session.get('user') %}<a href="{{ url_for('logout') }}">Log out ({{ session.get('user') }})</a>{% endif %}
     </nav>
     {% block content %}{% endblock %}

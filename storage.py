@@ -81,3 +81,49 @@ class InMemoryStore:
 
 # Single global store for the app (in-memory POC)
 store = InMemoryStore()
+
+
+class PayloadInspectStore:
+    """In-memory store for arbitrary POST payloads (inspect endpoint)."""
+
+    def __init__(self, max_items: Optional[int] = 100):
+        self._items: list[dict[str, Any]] = []
+        self._max_items = max_items
+
+    def add(
+        self,
+        *,
+        content_type: Optional[str] = None,
+        headers: dict[str, str],
+        raw_body: str,
+        parsed_body: Optional[Any] = None,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        record = {
+            "id": str(uuid.uuid4()),
+            "received_at": now,
+            "content_type": content_type or "",
+            "headers": headers,
+            "raw_body": raw_body,
+            "parsed_body": parsed_body,
+        }
+        self._items.append(record)
+        if self._max_items and len(self._items) > self._max_items:
+            self._items = self._items[-self._max_items :]
+        return record
+
+    def get_all(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        out = sorted(self._items, key=lambda e: e.get("received_at") or "", reverse=True)
+        return out[offset : offset + limit]
+
+    def get_by_id(self, item_id: str) -> Optional[dict[str, Any]]:
+        for e in self._items:
+            if e.get("id") == item_id:
+                return e
+        return None
+
+    def count(self) -> int:
+        return len(self._items)
+
+
+payload_inspect_store = PayloadInspectStore()

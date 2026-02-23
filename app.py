@@ -3,7 +3,7 @@ import os
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 
 from auth import verify_user, login_required
-from storage import store
+from storage import store, payload_inspect_store
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
@@ -31,6 +31,31 @@ def webhook_alarms():
 def webhook_health():
     """Liveness for Render/monitoring."""
     return jsonify({"ok": True}), 200
+
+
+# ---------- Inspect: arbitrary POST payloads (no auth on POST) ----------
+
+@app.route("/webhook/inspect", methods=["POST"])
+def webhook_inspect():
+    """Accept any POST body; store for later inspection. Returns 200 with id."""
+    content_type = request.content_type or ""
+    raw = request.get_data(as_text=True)
+    try:
+        parsed = request.get_json(silent=True)
+    except Exception:
+        parsed = None
+    # Store a subset of headers (no cookies/auth)
+    headers = {}
+    for k, v in request.headers:
+        if k.lower() in ("content-type", "content-length", "user-agent", "x-request-id") or k.lower().startswith("x-"):
+            headers[k] = v
+    record = payload_inspect_store.add(
+        content_type=content_type,
+        headers=headers,
+        raw_body=raw,
+        parsed_body=parsed,
+    )
+    return jsonify({"ok": True, "id": record["id"]}), 200
 
 
 # ---------- Auth ----------
@@ -149,6 +174,40 @@ def alarm_pair(alarm_id):
     if not events:
         return "No events found for this alarm", 404
     return render_template("alarm_pair.html", alarm_id=alarm_id, events=events)
+
+
+# ---------- Inspect dashboard (login required) ----------
+
+@app.route("/inspect")
+@login_required
+def inspect_index():
+    """List recent arbitrary payloads received at POST /webhook/inspect."""
+    try:
+        limit = min(int(request.args.get("limit", 50)), 200)
+    except ValueError:
+        limit = 50
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    items = payload_inspect_store.get_all(limit=limit, offset=offset)
+    return render_template(
+        "inspect.html",
+        items=items,
+        total=payload_inspect_store.count(),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.route("/inspect/<item_id>")
+@login_required
+def inspect_detail(item_id):
+    """Single payload: headers and body as received."""
+    item = payload_inspect_store.get_by_id(item_id)
+    if not item:
+        return "Payload not found", 404
+    return render_template("inspect_detail.html", item=item)
 
 
 if __name__ == "__main__":

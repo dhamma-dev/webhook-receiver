@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Inspect – Payloads{% endblock %}
+{% block content %}
+  <h1>Inspect payloads ({{ total }} total)</h1>
+  <p class="muted">POST any data to <code>/webhook/inspect</code> to capture it here.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Received at</th>
+        <th>Content-Type</th>
+        <th>Body preview</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in items %}
+      <tr>
+        <td class="muted">{{ i.received_at[:19] if i.received_at else '-' }}</td>
+        <td>{{ i.content_type or '-' }}</td>
+        <td class="muted" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">{{ (i.raw_body or '')[:80] }}{% if (i.raw_body or '')|length > 80 %}…{% endif %}</td>
+        <td><a href="/inspect/{{ i.id }}">View</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No payloads yet. POST to /webhook/inspect to add some.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if items and (offset > 0 or (items|length) == limit) %}
+  <p class="muted">
+    {% if offset > 0 %}<a href="?limit={{ limit }}&offset={{ [0, offset - limit]|max }}">← Newer</a>{% endif %}
+    {% if (items|length) == limit %} <a href="?limit={{ limit }}&offset={{ offset + limit }}">Older →</a>{% endif %}
+  </p>
+  {% endif %}
+{% endblock %}

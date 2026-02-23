@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Inspect {{ item.id[:8] }} – Payloads{% endblock %}
+{% block content %}
+  <h1>Payload {{ item.id[:8] }}…</h1>
+  <p class="muted">Received at {{ item.received_at }}</p>
+  <p class="muted">Content-Type: {{ item.content_type or '(none)' }}</p>
+
+  <h2>Headers</h2>
+  <pre>{% for k, v in (item.headers or {}).items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+
+  <h2>Body (raw)</h2>
+  <pre>{{ item.raw_body or '(empty)' }}</pre>
+
+  {% if item.parsed_body is not none %}
+  <h2>Body (parsed JSON)</h2>
+  <pre>{{ item.parsed_body | tojson(indent=2) }}</pre>
+  {% endif %}
+
+  <p><a href="/inspect">← Back to list</a></p>
+{% endblock %}
