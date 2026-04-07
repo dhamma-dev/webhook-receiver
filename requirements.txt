@@ -1,2 +1,4 @@
 Flask
 Gunicorn
+PyJWT
+flask-cors

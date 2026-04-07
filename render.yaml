@@ -1,0 +1,29 @@
+services:
+  # Single-service blueprint (one container / one exposed port).
+  # This runs BOTH the existing receiver/dashboard AND the new OAuth + Protected API endpoints
+  # in the same Flask app (`app.py`) behind Render's single $PORT.
+  - type: web
+    name: poc-oauth-protected-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT app:app
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_AUDIENCE
+        value: protected-api
+      # Optional: set to your public Render URL so tokens have a stable iss.
+      # If unset, the app uses the request host at runtime.
+      # Example: https://poc-oauth-protected-api.onrender.com
+      - key: OAUTH_ISSUER
+        value: ""
+      - key: TOKEN_EXPIRES_IN
+        value: "3600"
+      - key: OAUTH_FULL_CLIENT_SECRET
+        value: full-secret
+      - key: OAUTH_LIMITED_CLIENT_SECRET
+        value: limited-secret
+      - key: API_MODE
+        value: poc
+
