@@ -19,7 +19,15 @@ python app.py
 - **Health:** GET http://127.0.0.1:5000/webhook/alarms/health
 - **Webhook:** POST http://127.0.0.1:5000/webhook/alarms (no auth) with JSON body (e.g. `alarmId`, `state`, `rule`, …)
 
-Set `SECRET_KEY` in production for secure sessions. The dashboard auto-refreshes every 5s; check "Pause auto-refresh" to stop updates while you interact.
+Set `SECRET_KEY` in production for secure sessions.
+
+## Console
+
+- **Alarms** – one row per `alarmId` (RAISED and CLEARED correlated), severity tiles, event-rate chart, search (`/`), severity and state filters, acknowledge, and a detail drawer with the event timeline and payloads.
+- **Event log** – every webhook received, newest first.
+- **Integration** – endpoint URLs, payload field reference, a curl sample, and a test sender ("Simulate burst" raises a handful of sample alarms).
+
+The console refreshes every 4s; click the **Live** pill to pause. Acknowledgements are in memory, like the events.
 
 ## Deployment
 

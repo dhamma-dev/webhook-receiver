@@ -9,6 +9,17 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 
 
+@app.context_processor
+def asset_version():
+    """Cache-bust static files by their newest mtime so deploys show up immediately."""
+    static = app.static_folder
+    try:
+        v = int(max(os.path.getmtime(os.path.join(static, f)) for f in os.listdir(static)))
+    except (OSError, ValueError):
+        v = 0
+    return {"asset_v": v}
+
+
 # ---------- Webhook (no auth so monitoring can POST) ----------
 
 @app.route("/webhook/alarms", methods=["POST"])
@@ -59,27 +70,40 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    """Dashboard: list alarm events with optional filters."""
-    alarm_id = request.args.get("alarm_id", "").strip() or None
-    state = request.args.get("state", "").strip() or None
-    try:
-        limit = min(int(request.args.get("limit", 100)), 500)
-    except ValueError:
-        limit = 100
-    try:
-        offset = max(0, int(request.args.get("offset", 0)))
-    except ValueError:
-        offset = 0
-    events = store.get_events(alarm_id=alarm_id, state=state, limit=limit, offset=offset)
-    return render_template(
-        "dashboard.html",
-        events=events,
-        alarm_id_filter=alarm_id or "",
-        state_filter=state or "",
-        limit=limit,
-        offset=offset,
-        total=store.count(),
-    )
+    """Alarm console. Data is loaded and refreshed client-side from /api/console."""
+    return render_template("console.html")
+
+
+@app.route("/api/console")
+@login_required
+def api_console():
+    """Everything the console needs in one poll: stats, correlated alarms, recent events."""
+    alarms = store.get_alarms()
+    return jsonify({
+        "stats": store.stats(alarms),
+        "alarms": alarms[:1000],
+        "events": store.get_events(limit=300),
+    })
+
+
+@app.route("/api/alarms/<path:alarm_id>/ack", methods=["POST", "DELETE"])
+@login_required
+def api_alarm_ack(alarm_id):
+    """Acknowledge (POST) or un-acknowledge (DELETE) an alarm."""
+    user = session.get("user") if request.method == "POST" else None
+    if not store.set_ack(alarm_id, user):
+        return jsonify({"ok": False, "error": "Unknown alarm"}), 404
+    return jsonify({"ok": True, "alarm": store.get_alarm(alarm_id)})
+
+
+@app.route("/api/alarms/<path:alarm_id>")
+@login_required
+def api_alarm(alarm_id):
+    """One correlated alarm plus its full event history (oldest first)."""
+    alarm = store.get_alarm(alarm_id)
+    if not alarm:
+        return jsonify({"ok": False, "error": "Unknown alarm"}), 404
+    return jsonify({"alarm": alarm, "events": store.get_events_by_alarm_id(alarm_id)})
 
 
 @app.route("/api/events")
@@ -115,14 +139,14 @@ def event_detail(event_id):
     return render_template("event_detail.html", event=event)
 
 
-@app.route("/alarm/<alarm_id>")
+@app.route("/alarm/<path:alarm_id>")
 @login_required
 def alarm_pair(alarm_id):
     """All events for one alarm_id (RAISED + CLEARED pairing)."""
     events = store.get_events_by_alarm_id(alarm_id)
     if not events:
         return "No events found for this alarm", 404
-    return render_template("alarm_pair.html", alarm_id=alarm_id, events=events)
+    return render_template("alarm_pair.html", alarm=store.get_alarm(alarm_id), events=events)
 
 
 if __name__ == "__main__":

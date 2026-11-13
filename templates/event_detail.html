@@ -1,12 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Event {{ event.id[:8] }} – Alarm Webhook{% endblock %}
+{% set nav = 'events' %}
+{% block title %}Event {{ event.id[:8] }}{% endblock %}
+{% block topbar %}
+  <div class="crumbs"><a href="{{ url_for('index') }}#events">Event log</a><span>/</span><b class="mono">{{ event.id[:8] }}</b></div>
+  <span class="spacer"></span>
+{% endblock %}
 {% block content %}
-  <h1>Event {{ event.id[:8] }}…</h1>
-  <p class="muted">Received at {{ event.received_at }}</p>
-  <p>
-    Alarm: <a href="/alarm/{{ event.alarm_id }}">{{ event.alarm_id }}</a>
-    <span class="badge badge-{{ event.state|lower }}">{{ event.state }}</span>
-  </p>
-  <h2>Full payload</h2>
-  <pre>{{ event.payload | tojson(indent=2) }}</pre>
+<div class="page stack" style="gap:18px">
+  <div class="page-head">
+    <div class="row1">
+      <span class="state {{ 'cleared' if (event.state or '')|upper == 'CLEARED' }}">{{ event.state }}</span>
+      {% if event.severity_label %}<span class="badge sev-{{ event.severity }}">{{ event.severity_label }}</span>{% endif %}
+    </div>
+    <h2>{{ event.rule or 'Webhook event' }}</h2>
+  </div>
+  <dl class="meta">
+    <div class="full"><dt>Alarm</dt><dd><a class="mono" href="{{ url_for('alarm_pair', alarm_id=event.alarm_id) }}">{{ event.alarm_id }}</a></dd></div>
+    <div><dt>Received</dt><dd><time data-ts="{{ event.received_at }}">{{ event.received_at }}</time></dd></div>
+    <div><dt>Source</dt><dd>{{ event.source or '—' }}</dd></div>
+    <div class="full"><dt>Event ID</dt><dd class="mono">{{ event.id }}</dd></div>
+  </dl>
+  <div>
+    <div class="section-title">Payload</div>
+    <div class="code"><pre class="json">{{ event.payload | tojson(indent=2) }}</pre></div>
+  </div>
+</div>
 {% endblock %}

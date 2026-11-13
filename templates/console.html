@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% set nav = 'alarms' %}
+{% block title %}Alarm Console{% endblock %}
+{% block topbar %}
+  <h1 id="view-title">Alarms</h1>
+  <span class="spacer"></span>
+  <label class="search" id="search-wrap">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="Search rule, alarm ID, source, payload…" autocomplete="off" aria-label="Search">
+    <kbd>/</kbd>
+  </label>
+  <button class="live" id="live" title="Click to pause or resume live updates"><span class="dot"></span><span id="live-text">Connecting…</span></button>
+{% endblock %}
+{% block content %}
+<div id="console">
+  <!-- ===== Alarms ===== -->
+  <section class="stack" data-view="alarms" style="gap:16px">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Event rate</h2><span class="muted">last 60 minutes</span>
+        <span class="spacer"></span>
+        <div class="legend"><span><i style="--c:var(--crit)"></i>Raised</span><span><i style="--c:var(--cleared)"></i>Cleared</span></div>
+      </div>
+      <div class="panel-body">
+        <div class="chart" id="chart"></div>
+        <div class="chart-axis"><span>−60m</span><span>−45m</span><span>−30m</span><span>−15m</span><span>now</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="seg" id="scope">
+          <button data-scope="active" class="on">Active<span class="n" id="n-active"></span></button>
+          <button data-scope="cleared">Cleared<span class="n" id="n-cleared"></span></button>
+          <button data-scope="all">All<span class="n" id="n-all"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <div id="sev-chips" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="chip sev-critical" data-sev="critical">Critical</button>
+          <button class="chip sev-major" data-sev="major">Major</button>
+          <button class="chip sev-minor" data-sev="minor">Minor</button>
+          <button class="chip sev-warning" data-sev="warning">Warning</button>
+          <button class="chip sev-info" data-sev="info">Info</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Severity</th><th>Alarm</th><th>Source</th><th>State</th><th>Raised</th><th>Duration</th><th>Events</th><th>Acknowledged</th></tr></thead>
+          <tbody id="alarms-body"></tbody>
+        </table>
+      </div>
+      <div class="table-foot" id="alarms-foot"></div>
+    </div>
+  </section>
+
+  <!-- ===== Event log ===== -->
+  <section data-view="events" hidden>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Received webhooks</h2><span class="muted">newest first</span>
+        <span class="spacer"></span>
+        <div class="seg" id="ev-state">
+          <button data-state="" class="on">All</button>
+          <button data-state="RAISED">Raised</button>
+          <button data-state="CLEARED">Cleared</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Received</th><th>State</th><th>Severity</th><th>Rule</th><th>Alarm ID</th><th>Source</th><th>Event ID</th></tr></thead>
+          <tbody id="events-body"></tbody>
+        </table>
+      </div>
+      <div class="table-foot" id="events-foot"></div>
+    </div>
+  </section>
+
+  <!-- ===== Integration ===== -->
+  <section class="grid-2" data-view="integration" hidden>
+    <div class="stack" style="gap:16px">
+      <div class="panel">
+        <div class="panel-head"><h2>Endpoints</h2></div>
+        <div class="panel-body stack">
+          <div class="url-row"><span class="method">POST</span><code id="url-webhook"></code><button class="btn sm" data-copy="#url-webhook">Copy</button></div>
+          <div class="url-row"><span class="method get">GET</span><code id="url-health"></code><button class="btn sm" data-copy="#url-health">Copy</button></div>
+          <div class="muted">The webhook accepts unauthenticated <span class="mono">application/json</span> and replies <span class="mono">{"ok": true, "id": "…"}</span>.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Payload fields</h2></div>
+        <div class="table-wrap">
+          <table class="fields-table">
+            <thead><tr><th>Field</th><th>Used for</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">alarmId</td><td><b>Required.</b> Correlates RAISED and CLEARED into one alarm.</td></tr>
+              <tr><td class="mono">state</td><td><b>Required.</b> <span class="mono">CLEARED</span> closes the alarm; anything else opens it.</td></tr>
+              <tr><td class="mono">alarmSeverity</td><td>Critical, Major, Minor or Warning. Others show as Info.</td></tr>
+              <tr><td class="mono">rule</td><td>Alarm title.</td></tr>
+              <tr><td class="mono">source</td><td>Source column. <span class="mono">device</span>, <span class="mono">host</span>, <span class="mono">resource</span> and <span class="mono">node</span> also work.</td></tr>
+              <tr><td class="mono">description</td><td>Detail line. <span class="mono">message</span> and <span class="mono">summary</span> also work.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>curl</h2></div>
+        <div class="panel-body"><div class="code"><pre id="curl"></pre><button class="btn sm" data-copy="#curl">Copy</button></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Send a test alarm</h2><span class="spacer"></span><button class="btn sm" id="sim-burst" title="Raise a handful of random alarms and clear a few active ones">Simulate burst</button></div>
+      <form class="panel-body stack" id="sim" autocomplete="off">
+        <div class="form-grid">
+          <div class="field full"><label for="sim-rule">Rule</label><input id="sim-rule" value="Interface down" required></div>
+          <div class="field"><label for="sim-sev">Severity</label>
+            <select id="sim-sev"><option>Critical</option><option selected>Major</option><option>Minor</option><option>Warning</option></select></div>
+          <div class="field"><label for="sim-source">Source</label><input id="sim-source" value="core-sw-01"></div>
+          <div class="field full"><label for="sim-id">Alarm ID</label>
+            <div style="display:flex;gap:8px"><input id="sim-id" class="mono" required><button type="button" class="btn" id="sim-newid">New</button></div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" type="submit" data-state="RAISED">Send RAISED</button>
+          <button class="btn" type="submit" data-state="CLEARED">Send CLEARED</button>
+        </div>
+        <div>
+          <div class="section-title">Responses</div>
+          <div class="log" id="sim-log"><span class="muted">Nothing sent yet.</span></div>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Alarm details" aria-hidden="true"></aside>
+{% endblock %}

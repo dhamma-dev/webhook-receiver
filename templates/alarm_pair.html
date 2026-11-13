@@ -1,37 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Alarm {{ alarm_id[:16] }}… – Alarm Webhook{% endblock %}
+{% set nav = 'alarms' %}
+{% block title %}{{ alarm.rule or alarm.alarm_id }}{% endblock %}
+{% block topbar %}
+  <div class="crumbs"><a href="{{ url_for('index') }}#alarms">Alarms</a><span>/</span><b class="mono">{{ alarm.alarm_id }}</b></div>
+  <span class="spacer"></span>
+{% endblock %}
 {% block content %}
-  <h1>Alarm {{ alarm_id }}</h1>
-  <p class="muted">All events for this alarm (RAISED / CLEARED pairing)</p>
-  <table>
-    <thead>
-      <tr>
-        <th>Received at</th>
-        <th>State</th>
-        <th>Rule</th>
-        <th>Raised time</th>
-        <th>Cleared time</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
+<div class="page stack" style="gap:18px">
+  <div class="page-head">
+    <div class="row1">
+      <span class="badge sev-{{ alarm.severity }}">{{ alarm.severity_label or alarm.severity }}</span>
+      <span class="state {{ '' if alarm.active else 'cleared' }}">{{ alarm.state }}</span>
+      {% if alarm.ack %}<span class="muted">· acknowledged by {{ alarm.ack.by }}</span>{% endif %}
+    </div>
+    <h2>{{ alarm.rule or 'Alarm ' ~ alarm.alarm_id }}</h2>
+    {% if alarm.description %}<div class="muted">{{ alarm.description }}</div>{% endif %}
+  </div>
+  <dl class="meta">
+    <div class="full"><dt>Alarm ID</dt><dd class="mono">{{ alarm.alarm_id }}</dd></div>
+    <div><dt>Source</dt><dd>{{ alarm.source or '—' }}</dd></div>
+    <div><dt>Events</dt><dd>{{ alarm.event_count }} ({{ alarm.raise_count }} raised)</dd></div>
+    <div><dt>First seen</dt><dd><time data-ts="{{ alarm.first_seen }}">{{ alarm.first_seen }}</time></dd></div>
+    <div><dt>Last seen</dt><dd><time data-ts="{{ alarm.last_seen }}">{{ alarm.last_seen }}</time></dd></div>
+  </dl>
+  <div>
+    <div class="section-title">Timeline</div>
+    <ol class="timeline">
       {% for e in events %}
-      <tr>
-        <td class="muted">{{ e.received_at[:19] if e.received_at else '-' }}</td>
-        <td><span class="badge badge-{{ e.state|lower }}">{{ e.state }}</span></td>
-        <td>{{ e.payload.get('rule') or '-' }}</td>
-        <td class="muted">{{ (e.payload.get('raisedTime') or '-')[:19] }}</td>
-        <td class="muted">{{ (e.payload.get('clearedTime') or '-')[:19] }}</td>
-        <td><a href="/event/{{ e.id }}">JSON</a></td>
-      </tr>
+      <li class="{{ 'cleared' if (e.state or '')|upper == 'CLEARED' }}">
+        <details {{ 'open' if loop.last }}>
+          <summary><b>{{ e.state }}</b><time class="when" data-ts="{{ e.received_at }}">{{ e.received_at }}</time><span class="tog"></span></summary>
+          <div class="code"><pre class="json">{{ e.payload | tojson(indent=2) }}</pre></div>
+          <div style="margin-top:6px"><a class="mono" href="{{ url_for('event_detail', event_id=e.id) }}">event {{ e.id[:8] }}</a></div>
+        </details>
+      </li>
       {% endfor %}
-    </tbody>
-  </table>
-  <h2>Payloads</h2>
-  {% for e in events %}
-  <details>
-    <summary>{{ e.state }} at {{ e.received_at[:19] if e.received_at else '-' }}</summary>
-    <pre>{{ e.payload | tojson(indent=2) }}</pre>
-  </details>
-  {% endfor %}
+    </ol>
+  </div>
+</div>
 {% endblock %}

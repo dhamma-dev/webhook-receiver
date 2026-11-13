@@ -5,7 +5,7 @@ Set DASHBOARD_USER and DASHBOARD_PASSWORD to enable login.
 import os
 from functools import wraps
 
-from flask import session, redirect, request, url_for
+from flask import jsonify, session, redirect, request, url_for
 
 DASHBOARD_USER_ENV = "DASHBOARD_USER"
 DASHBOARD_PASSWORD_ENV = "DASHBOARD_PASSWORD"
@@ -24,6 +24,8 @@ def login_required(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
         if session.get("user") is None:
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "error": "Not logged in"}), 401
             return redirect(url_for("login", next=request.url))
         return f(*args, **kwargs)
     return wrapped
