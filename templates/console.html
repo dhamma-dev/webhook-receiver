@@ -98,8 +98,9 @@
               <tr><td class="mono">state</td><td><b>Required.</b> <span class="mono">CLEARED</span> closes the alarm; anything else opens it.</td></tr>
               <tr><td class="mono">alarmSeverity</td><td>Critical, Major, Minor or Warning. Others show as Info.</td></tr>
               <tr><td class="mono">rule</td><td>Alarm title.</td></tr>
-              <tr><td class="mono">source</td><td>Source column. <span class="mono">device</span>, <span class="mono">host</span>, <span class="mono">resource</span> and <span class="mono">node</span> also work.</td></tr>
+              <tr><td class="mono">monitoringPointName</td><td>Source column. <span class="mono">source</span>, <span class="mono">device</span>, <span class="mono">host</span> and <span class="mono">itemName</span> also work.</td></tr>
               <tr><td class="mono">description</td><td>Detail line. <span class="mono">message</span> and <span class="mono">summary</span> also work.</td></tr>
+              <tr><td class="mono">itemName, target, tags, providerLink…</td><td>Kept in the payload and used in Slack and Google Chat messages.</td></tr>
             </tbody>
           </table>
         </div>
@@ -114,10 +115,10 @@
       <div class="panel-head"><h2>Send a test alarm</h2><span class="spacer"></span><button class="btn sm" id="sim-burst" title="Raise a handful of random alarms and clear a few active ones">Simulate burst</button></div>
       <form class="panel-body stack" id="sim" autocomplete="off">
         <div class="form-grid">
-          <div class="field full"><label for="sim-rule">Rule</label><input id="sim-rule" value="Interface down" required></div>
+          <div class="field full"><label for="sim-rule">Rule</label><input id="sim-rule" value="Data loss above threshold" required></div>
           <div class="field"><label for="sim-sev">Severity</label>
             <select id="sim-sev"><option>Critical</option><option selected>Major</option><option>Minor</option><option>Warning</option></select></div>
-          <div class="field"><label for="sim-source">Source</label><input id="sim-source" value="core-sw-01"></div>
+          <div class="field"><label for="sim-source">Monitoring point</label><input id="sim-source" value="r90-2FPtR - ANN"></div>
           <div class="field full"><label for="sim-id">Alarm ID</label>
             <div style="display:flex;gap:8px"><input id="sim-id" class="mono" required><button type="button" class="btn" id="sim-newid">New</button></div></div>
         </div>
@@ -130,6 +131,21 @@
           <div class="log" id="sim-log"><span class="muted">Nothing sent yet.</span></div>
         </div>
       </form>
+    </div>
+  </section>
+
+  <!-- ===== Forwarding ===== -->
+  <section class="stack" data-view="forwarding" style="gap:16px" hidden>
+    <div class="muted">Every alarm received on <span class="mono">/webhook/alarms</span> is reformatted and forwarded to the destinations switched on below. Webhook URLs are secrets: they are never shown again after saving.</div>
+    <div class="grid-2" id="fwd-cards"></div>
+    <div class="panel">
+      <div class="panel-head"><h2>Recent deliveries</h2><span class="muted">last 100, newest first</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sent</th><th>Destination</th><th>State</th><th>Alarm</th><th>Result</th><th>Time</th></tr></thead>
+          <tbody id="fwd-log"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </div>

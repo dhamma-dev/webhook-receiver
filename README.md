@@ -27,6 +27,10 @@ Set `SECRET_KEY` in production for secure sessions.
 - **Event log** – every webhook received, newest first.
 - **Integration** – endpoint URLs, payload field reference, a curl sample, and a test sender ("Simulate burst" raises a handful of sample alarms).
 
+- **Forwarding** – bridge to Slack and Google Chat. Paste an incoming-webhook URL per destination, switch it on, and every alarm is reformatted and forwarded (Slack: Block Kit message with a severity colour bar; Google Chat: a card, with RAISED and CLEARED for one alarm in the same thread). Includes a test-message button, a preview of the JSON sent, and a delivery log.
+
+Forwarding settings saved in the console are in memory and reset on restart. To make them permanent, set **SLACK_WEBHOOK_URL** and/or **GCHAT_WEBHOOK_URL** in the environment; forwarding is then on from startup.
+
 The console refreshes every 4s; click the **Live** pill to pause. Acknowledgements are in memory, like the events.
 
 ## Deployment

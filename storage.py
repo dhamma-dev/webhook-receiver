@@ -17,8 +17,8 @@ _SEVERITY_ALIASES = {
 
 # Payload shapes vary between senders, so look in a few likely places.
 _SOURCE_KEYS = (
-    "source", "sourceName", "device", "deviceName", "host", "hostname",
-    "resource", "resourceName", "node", "nodeName", "entity", "entityName",
+    "monitoringPointName", "source", "sourceName", "device", "deviceName", "host", "hostname",
+    "resource", "resourceName", "node", "nodeName", "entity", "entityName", "itemName", "target",
 )
 _DESCRIPTION_KEYS = ("description", "message", "summary", "alarmDescription", "text", "details")
 

@@ -3,10 +3,13 @@ import os
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
 
 from auth import verify_user, login_required
+from forwarding import DESTINATIONS, TRANSFORMS, SAMPLE_PAYLOAD, forwarder
 from storage import store
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.json.sort_keys = False  # keep destination and payload key order as given
 
 
 @app.context_processor
@@ -35,6 +38,7 @@ def webhook_alarms():
     if not alarm_id or not state:
         return jsonify({"ok": False, "error": "Missing alarmId or state"}), 400
     record = store.add_event(payload)
+    forwarder.dispatch(payload)  # Slack / Google Chat bridge; queued, never blocks the reply
     return jsonify({"ok": True, "id": record["id"]}), 200
 
 
@@ -104,6 +108,46 @@ def api_alarm(alarm_id):
     if not alarm:
         return jsonify({"ok": False, "error": "Unknown alarm"}), 404
     return jsonify({"alarm": alarm, "events": store.get_events_by_alarm_id(alarm_id)})
+
+
+# ---------- Forwarding (Slack / Google Chat bridge) ----------
+
+def _forwarding_state():
+    latest = store.get_events(limit=1)
+    sample = latest[0]["payload"] if latest else SAMPLE_PAYLOAD
+    return {
+        "destinations": forwarder.describe(),
+        "deliveries": forwarder.deliveries(),
+        "preview": {dest: transform(sample) for dest, transform in TRANSFORMS.items()},
+        "preview_source": "latest event" if latest else "sample alarm",
+    }
+
+
+@app.route("/api/forwarding")
+@login_required
+def api_forwarding():
+    return jsonify(_forwarding_state())
+
+
+@app.route("/api/forwarding/<dest>", methods=["PUT", "DELETE"])
+@app.route("/api/forwarding/<dest>/test", methods=["POST"], endpoint="api_forwarding_test")
+@login_required
+def api_forwarding_update(dest):
+    if dest not in DESTINATIONS:
+        return jsonify({"ok": False, "error": "Unknown destination"}), 404
+    if request.headers.get("X-Requested-With") != "fetch":
+        return jsonify({"ok": False, "error": "Bad request"}), 400
+    error, result = None, None
+    if request.method == "PUT":
+        error = forwarder.update(dest, request.get_json(silent=True) or {})
+    elif request.method == "DELETE":
+        forwarder.clear(dest)
+    else:
+        result = forwarder.send_test(dest)
+        if result is None:
+            error = "Save a webhook URL first"
+    body = dict(_forwarding_state(), ok=error is None, error=error, result=result)
+    return jsonify(body), (400 if error else 200)
 
 
 @app.route("/api/events")

@@ -51,9 +51,12 @@
     ta.remove();
   }
   function api(url, opts) {
-    return fetch(url, Object.assign({ credentials: 'same-origin' }, opts)).then(function (r) {
+    opts = Object.assign({ credentials: 'same-origin' }, opts);
+    opts.headers = Object.assign({ 'X-Requested-With': 'fetch' }, opts.headers);
+    if (opts.json) { opts.body = JSON.stringify(opts.json); opts.headers['Content-Type'] = 'application/json'; }
+    return fetch(url, opts).then(function (r) {
       if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.href); throw new Error('unauthenticated'); }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok && !opts.allowError) throw new Error('HTTP ' + r.status);
       return r.json();
     });
   }
@@ -245,6 +248,7 @@
         if (S.drawer) refreshDrawer();
       }
       renderLive();
+      loadForwarding(false);
     }).catch(function (err) {
       if (err.message !== 'unauthenticated') { S.error = true; renderLive(); }
     });
@@ -257,14 +261,16 @@
   $('#live').addEventListener('click', function () { S.paused = !S.paused; renderLive(); if (!S.paused) poll(); });
 
   // ---------- Views ----------
-  var TITLES = { alarms: 'Alarms', events: 'Event log', integration: 'Integration' };
+  var TITLES = { alarms: 'Alarms', events: 'Event log', integration: 'Integration', forwarding: 'Forwarding' };
   function setView() {
     var v = location.hash.replace('#', '');
     S.view = TITLES[v] ? v : 'alarms';
     $$('#console > section').forEach(function (s) { s.hidden = s.dataset.view !== S.view; });
     $$('#nav a').forEach(function (a) { a.classList.toggle('active', a.dataset.view === S.view); });
     $('#view-title').textContent = TITLES[S.view];
-    $('#search-wrap').style.visibility = S.view === 'integration' ? 'hidden' : '';
+    var noSearch = S.view === 'integration' || S.view === 'forwarding';
+    $('#search-wrap').style.visibility = noSearch ? 'hidden' : '';
+    if (S.view === 'forwarding') loadForwarding(true);
   }
   window.addEventListener('hashchange', setView);
 
@@ -285,7 +291,7 @@
   $('#kpis').addEventListener('click', function (ev) { var k = ev.target.closest('button.kpi'); if (k) toggleSev(k.dataset.sev); });
   document.addEventListener('keydown', function (ev) {
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (ev.key === '/' && !typing && S.view !== 'integration') { ev.preventDefault(); $('#search').focus(); }
+    if (ev.key === '/' && !typing && (S.view === 'alarms' || S.view === 'events')) { ev.preventDefault(); $('#search').focus(); }
     if (ev.key === 'Escape') { if (S.drawer) closeDrawer(); else if (document.activeElement === $('#search')) $('#search').blur(); }
     if (ev.key === 'Enter' && document.activeElement.matches && document.activeElement.matches('tr.row')) document.activeElement.click();
   });
@@ -405,40 +411,146 @@
       })
       .catch(function (err) { logLine(false, 'Request failed: ' + err.message); });
   }
-  function buildPayload(id, state, sev, rule, source) {
+  // Test alarms mirror the shape of the real monitoring payloads.
+  function buildPayload(id, state, sev, rule, mp, target, raisedAt) {
     var now = new Date().toISOString();
-    var p = { alarmId: id, state: state, alarmSeverity: sev, rule: rule, source: source };
-    p[state === 'CLEARED' ? 'clearedTime' : 'raisedTime'] = now;
+    var p = { alarmId: id, alarmSeverity: String(sev).toUpperCase(), alarmType: 'QUALITY_OF_SERVICE',
+              description: rule + ' for 1 out of 2 samples', itemName: target ? mp + ' <-> ' + target + ' (single)' : mp,
+              itemType: 'NETWORK_PATH', monitoringPointName: mp, rule: rule, silenced: false, state: state,
+              tags: [{ category: 'Source', value: 'Test sender' }] };
+    if (target) p.target = target;
+    if (state === 'CLEARED') { p.clearedTime = now; if (raisedAt) p.raisedTime = raisedAt; } else { p.raisedTime = now; }
     return p;
   }
   $('#sim').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var state = (ev.submitter && ev.submitter.dataset.state) || 'RAISED';
-    send(buildPayload($('#sim-id').value.trim(), state, $('#sim-sev').value, $('#sim-rule').value.trim(), $('#sim-source').value.trim()))
+    var known = S.data && S.data.alarms.filter(function (a) { return a.alarm_id === $('#sim-id').value.trim(); })[0];
+    send(buildPayload($('#sim-id').value.trim(), state, $('#sim-sev').value, $('#sim-rule').value.trim(), $('#sim-source').value.trim(), 'www.example.com', known && known.raised_at))
       .then(function () { poll(true); });
   });
 
   var SAMPLE_RULES = [
-    ['Interface down', 'Critical'], ['BGP peer lost', 'Critical'], ['High CPU utilisation', 'Major'], ['Packet loss above 5%', 'Major'],
-    ['Memory above 90%', 'Major'], ['Disk space low', 'Minor'], ['Fan speed degraded', 'Minor'], ['Config drift detected', 'Warning'],
-    ['Latency above threshold', 'Warning'], ['Power supply redundancy lost', 'Critical'], ['Optical RX power low', 'Minor']
+    ['Data loss above 0 %', 'Critical'], ['Connectivity lost', 'Critical'], ['Latency above 150 ms', 'Major'], ['Data jitter above 20 ms', 'Major'],
+    ['Bottleneck bandwidth below 200 Mbps', 'Minor'], ['Voice MOS below 3.8', 'Major'], ['Route changed', 'Warning'],
+    ['Web response time above 4 s', 'Minor'], ['DNS resolution failed', 'Critical'], ['Utilised capacity above 80 %', 'Warning']
   ];
-  var SAMPLE_SOURCES = ['core-sw-01', 'core-sw-02', 'edge-rtr-ams-1', 'edge-rtr-lon-3', 'fw-dmz-02', 'olt-east-14', 'agg-sw-07', 'dc1-leaf-22'];
+  var SAMPLE_SOURCES = ['r90-2FPtR - ANN', 'P18A06098 - ANN', 'm50-LON-branch', 'r1000-NYC-dc1', 'v35-SFO-office', 'c50-container-eu'];
+  var SAMPLE_TARGETS = ['www.salesforce.com', 'teams.microsoft.com', 'zoom.us', 'dc1-gateway.corp', 'www.office.com', 'api.github.com'];
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   $('#sim-burst').addEventListener('click', function () {
     var btn = this, jobs = [];
     btn.disabled = true;
-    for (var i = 0; i < 6; i++) { var r = pick(SAMPLE_RULES); jobs.push(buildPayload(newId(), 'RAISED', r[1], r[0], pick(SAMPLE_SOURCES))); }
+    for (var i = 0; i < 6; i++) { var r = pick(SAMPLE_RULES); jobs.push(buildPayload(newId(), 'RAISED', r[1], r[0], pick(SAMPLE_SOURCES), pick(SAMPLE_TARGETS))); }
     var active = S.data ? S.data.alarms.filter(function (a) { return a.active; }) : [];
     active.sort(function () { return Math.random() - 0.5; }).slice(0, Math.min(2, active.length)).forEach(function (a) {
-      jobs.push(buildPayload(a.alarm_id, 'CLEARED', a.severity_label || 'Minor', a.rule || 'Alarm', a.source || ''));
+      jobs.push(buildPayload(a.alarm_id, 'CLEARED', a.severity_label || 'Minor', a.rule || 'Alarm', a.source || '', '', a.raised_at));
     });
     jobs.reduce(function (p, job) { return p.then(function () { return send(job); }); }, Promise.resolve())
       .then(function () { btn.disabled = false; toast(jobs.length + ' test events sent'); poll(true); });
+  });
+
+  // ---------- Forwarding (Slack / Google Chat) ----------
+  var F = { data: null, loading: false };
+  var DEST_ICON = { slack: '#', gchat: '💬' };
+  function loadForwarding(redraw) {
+    if (S.view !== 'forwarding' && F.data) return;
+    if (F.loading) return;
+    F.loading = true;
+    api('/api/forwarding').then(function (data) { applyForwarding(data, redraw || !$('#fwd-cards').children.length); })
+      .catch(function () {}).then(function () { F.loading = false; });
+  }
+  function applyForwarding(data, redrawCards) {
+    F.data = data;
+    if (redrawCards) renderFwdCards();
+    renderFwdLog();
+    var on = Object.keys(data.destinations).filter(function (k) { return data.destinations[k].enabled; }).length;
+    var badge = $('#nav-fwd'); badge.hidden = !on; badge.textContent = on + ' on';
+  }
+  function renderFwdCards() {
+    var d = F.data;
+    $('#fwd-cards').innerHTML = Object.keys(d.destinations).map(function (key) {
+      var c = d.destinations[key];
+      var status = c.enabled ? '<span class="badge sev-cleared">Forwarding</span>'
+        : c.configured ? '<span class="badge sev-minor">Paused</span>' : '<span class="badge hollow">Not configured</span>';
+      var hint = c.configured
+        ? 'Saved: <span class="mono">' + esc(c.url_masked) + '</span>' + (c.from_env ? ' (from <span class="mono">' + esc(c.env) + '</span>)' : '') + '. Leave blank to keep it.'
+        : 'Paste the incoming webhook URL for the channel or space. Set <span class="mono">' + esc(c.env) + '</span> on the server to keep it across restarts.';
+      return '<form class="panel" data-dest="' + key + '" autocomplete="off">' +
+        '<div class="panel-head"><span class="dest-logo">' + DEST_ICON[key] + '</span><h2>' + esc(c.label) + '</h2>' + status + '<span class="spacer"></span>' +
+          '<label class="switch"><input type="checkbox" data-f="enabled"' + (c.enabled ? ' checked' : '') + '><i></i><span>Forward alarms</span></label></div>' +
+        '<div class="panel-body stack">' +
+          '<div class="field"><label for="fwd-url-' + key + '">Incoming webhook URL</label>' +
+            '<input id="fwd-url-' + key + '" data-f="url" type="password" autocomplete="off" spellcheck="false" placeholder="' + esc(c.placeholder) + '">' +
+            '<div class="hint">' + hint + '</div><div class="field-error" hidden></div></div>' +
+          '<div class="checks"><span class="muted">Forward on</span>' +
+            '<label><input type="checkbox" data-f="on_raised"' + (c.on_raised ? ' checked' : '') + '> Raised</label>' +
+            '<label><input type="checkbox" data-f="on_cleared"' + (c.on_cleared ? ' checked' : '') + '> Cleared</label></div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button class="btn primary" type="submit">Save</button>' +
+            '<button class="btn" type="button" data-act="test"' + (c.configured ? '' : ' disabled') + '>Send test message</button>' +
+            '<button class="btn ghost" type="button" data-act="remove"' + (c.configured ? '' : ' disabled') + '>Remove</button></div>' +
+          '<details class="preview"><summary>Message that would be sent (' + esc(d.preview_source) + ')</summary>' +
+            '<div class="code"><pre>' + highlight(JSON.stringify(d.preview[key], null, 2)) + '</pre></div></details>' +
+        '</div></form>';
+    }).join('');
+  }
+  function renderFwdLog() {
+    var rows = F.data.deliveries.map(function (r) {
+      var cleared = String(r.state).toUpperCase() === 'CLEARED';
+      var result = r.ok ? '<span class="result-ok">' + r.status + ' Delivered</span>'
+        : '<span class="result-err">' + (r.status || 'Failed') + '</span> <span class="muted">' + esc(r.detail) + '</span>';
+      return '<tr><td class="num">' + timeTag(r.at) + '</td><td>' + esc(r.label) + (r.test ? ' <span class="pill">test</span>' : '') + '</td>' +
+        '<td><span class="state' + (cleared ? ' cleared' : '') + '">' + esc(r.state) + '</span></td>' +
+        '<td class="wrap"><div class="title">' + esc(r.rule || 'Alarm') + '</div><div class="sub">' + esc(r.alarm_id) + '</div></td>' +
+        '<td class="detail">' + result + '</td><td class="num muted">' + r.ms + ' ms</td></tr>';
+    }).join('');
+    $('#fwd-log').innerHTML = rows || '<tr><td colspan="6"><div class="empty"><h3>Nothing forwarded yet</h3><div>Turn a destination on, then send an alarm or a test message.</div></div></td></tr>';
+  }
+  function fwdRequest(form, method, path, json) {
+    var err = $('.field-error', form);
+    $$('button', form).forEach(function (b) { b.disabled = true; });
+    return api('/api/forwarding/' + form.dataset.dest + (path || ''), { method: method, json: json, allowError: true })
+      .then(function (res) {
+        if (res.destinations) applyForwarding(res, res.ok);
+        if (!res.ok) {
+          $$('button', form).forEach(function (b) { b.disabled = false; });
+          err.textContent = res.error || 'Something went wrong'; err.hidden = false;
+        }
+        return res;
+      })
+      .catch(function () { $$('button', form).forEach(function (b) { b.disabled = false; }); toast('Request failed'); return {}; });
+  }
+  function fwdValues(form) {
+    return { url: $('[data-f=url]', form).value.trim(), enabled: $('[data-f=enabled]', form).checked,
+             on_raised: $('[data-f=on_raised]', form).checked, on_cleared: $('[data-f=on_cleared]', form).checked };
+  }
+  $('#fwd-cards').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var form = ev.target, v = fwdValues(form), dest = F.data.destinations[form.dataset.dest];
+    if (v.url && !dest.configured) v.enabled = true;  // first save: switch it on
+    fwdRequest(form, 'PUT', '', v).then(function (res) { if (res.ok) toast('Forwarding settings saved'); });
+  });
+  $('#fwd-cards').addEventListener('change', function (ev) {
+    var form = ev.target.closest('form');
+    if (!ev.target.matches('[data-f=enabled]') || !F.data.destinations[form.dataset.dest].configured || $('[data-f=url]', form).value.trim()) return;
+    fwdRequest(form, 'PUT', '', fwdValues(form)).then(function (res) { if (res.ok) toast(ev.target.checked ? 'Forwarding on' : 'Forwarding paused'); });
+  });
+  $('#fwd-cards').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-act]'); if (!btn) return;
+    var form = btn.closest('form'), label = F.data.destinations[form.dataset.dest].label;
+    if (btn.dataset.act === 'test') {
+      fwdRequest(form, 'POST', '/test').then(function (res) {
+        if (res.result) toast(res.result.ok ? 'Test message delivered to ' + label : 'Test failed: see Recent deliveries');
+      });
+    } else if (confirm('Remove the saved ' + label + ' webhook URL?')) {
+      fwdRequest(form, 'DELETE', '').then(function (res) { if (res.ok) toast(label + ' webhook removed'); });
+    }
   });
 
   // ---------- Go ----------
   setView();
   renderLive();
   poll(true);
+  loadForwarding(true);
 })();
